@@ -1,4 +1,4 @@
-fastapi
-uvicorn
-pillow
+fastapi==0.111.2
+uvicorn[standard]==0.23.2
+pillow==10.0.0
 python-multipart
