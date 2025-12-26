@@ -97,35 +97,22 @@ def image_to_sequence(image_bytes: bytes) -> List[str]:
 # ===============================
 # ENDPOINT PRINCIPAL
 # ===============================
-
 @app.post("/calculate")
 async def calculate(
-    file: Optional[UploadFile] = File(None),
+    file: UploadFile = File(...),
     manual_history: Optional[str] = Form(None)
 ):
-    history = []
-
-    # 📷 Leitura da imagem
-    if file is not None:
-        image_bytes = await file.read()
-        history.extend(image_to_sequence(image_bytes))
-
-    # ✍️ Histórico manual (JSON em string)
     if manual_history:
-        try:
-            parsed = json.loads(manual_history)
-            if isinstance(parsed, list):
-                history.extend(parsed)
-        except json.JSONDecodeError:
-            return {"error": "manual_history deve ser uma lista JSON válida"}
+        history = json.loads(manual_history)
+    else:
+        history = []
 
-    probabilities = adaptive_probability(history)
-    best_event = max(probabilities, key=probabilities.get)
+    image_bytes = await file.read()
 
     return {
-        "total_observacoes": len(history),
-        "repeticoes": {s: history.count(s) for s in STATES},
-        "probabilidades": probabilities,
-        "mais_provavel": best_event,
-        "classificacao": classify(probabilities[best_event])
+        "status": "ok",
+        "filename": file.filename,
+        "history_length": len(history),
+        "message": "Imagem recebida com sucesso"
     }
+
