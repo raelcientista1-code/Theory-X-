@@ -5,14 +5,15 @@ from datetime import datetime
 from PIL import Image
 import io
 
-app = FastAPI(title="Adaptive Probability with Memory")
+app = FastAPI(
+    title="Adaptive Probability with Memory",
+    description="Sistema adaptativo com entrada manual e visual",
+    version="1.0.0"
+)
 
 # ===============================
 # ESTADOS OFICIAIS DO SISTEMA
 # ===============================
-# T = Tigre (Amarelo)
-# D = Dragão (Vermelho)
-# E = Empate (Verde)
 STATES = ["T", "D", "E"]
 
 
@@ -22,6 +23,22 @@ STATES = ["T", "D", "E"]
 
 class HistoryInput(BaseModel):
     manual_history: Optional[List[str]] = []
+
+
+# ===============================
+# ROTA RAIZ (FIX NOT FOUND)
+# ===============================
+
+@app.get("/")
+def root():
+    return {
+        "status": "online",
+        "message": "Adaptive Probability API está rodando",
+        "endpoints": {
+            "docs": "/docs",
+            "calculate": "/calculate"
+        }
+    }
 
 
 # ===============================
@@ -64,23 +81,15 @@ def classify(p):
 
 
 # ===============================
-# MÓDULO VISUAL (PLACEHOLDER)
+# MÓDULO VISUAL (GANCHO)
 # ===============================
 
 def image_to_sequence(image_bytes: bytes) -> List[str]:
     """
-    Aqui futuramente entra OpenCV.
-    Por enquanto, isso é um 'gancho'.
+    Placeholder para visão computacional futura.
     """
-
-    # Abrindo imagem (qualquer formato)
-    image = Image.open(io.BytesIO(image_bytes))
-
-    # ⚠️ VISÃO COMPUTACIONAL AQUI
-    # Exemplo fictício:
-    extracted_sequence = ["T", "D", "T", "E", "T"]
-
-    return extracted_sequence
+    Image.open(io.BytesIO(image_bytes))
+    return ["T", "D", "T", "E", "T"]
 
 
 # ===============================
@@ -90,16 +99,16 @@ def image_to_sequence(image_bytes: bytes) -> List[str]:
 @app.post("/calculate")
 async def calculate(
     file: Optional[UploadFile] = File(None),
-    data: HistoryInput = None
+    data: Optional[HistoryInput] = None
 ):
-    history = []
+    history: List[str] = []
 
-    # 1️⃣ Se veio foto, extrai sequência
+    # 1️⃣ Entrada por imagem
     if file is not None:
         image_bytes = await file.read()
         history.extend(image_to_sequence(image_bytes))
 
-    # 2️⃣ Se veio histórico manual, adiciona
+    # 2️⃣ Entrada manual
     if data and data.manual_history:
         history.extend(data.manual_history)
 
@@ -108,10 +117,11 @@ async def calculate(
     best_event = max(probabilities, key=probabilities.get)
 
     return {
-        "timestamp": datetime.now(),
+        "timestamp": datetime.now().isoformat(),
         "total_observacoes": len(history),
         "repeticoes": {s: history.count(s) for s in STATES},
         "probabilidades": probabilities,
         "mais_provavel": best_event,
         "classificacao": classify(probabilities[best_event]),
+        "historico_usado": history
     }
