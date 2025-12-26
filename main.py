@@ -1,14 +1,26 @@
 from fastapi import FastAPI, UploadFile, File, Form
 from typing import Optional, List
 from PIL import Image
+import cv2
+import numpy as np
 import io
 from datetime import datetime
+import os
 
 app = FastAPI(title="Adaptive Probability API")
 
 STATES = ["T", "D", "E"]
 
+# Mapeamento do estado para o arquivo de template
+TEMPLATES = {
+    "T": "T. Tigre Amarelo.png",
+    "D": "D. Vermelho.png",
+    "E": "E. Empate verde.png"
+}
+
+# ===============================
 # Função de probabilidade
+# ===============================
 def adaptive_probability(history: List[str]):
     beta = 2.0
     epsilon = 1e-6
@@ -28,7 +40,34 @@ def classify(p):
     elif p>=0.35: return "Probabilidade MÉDIA"
     else: return "Probabilidade PEQUENA"
 
+# ===============================
+# Função de extração com template matching
+# ===============================
+def extract_sequence_from_image(image_bytes: bytes) -> List[str]:
+    # Converte imagem para OpenCV
+    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    cv_image = np.array(image)
+    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
+    
+    sequence = []
+    for state in STATES:
+        template_path = TEMPLATES[state]
+        if not os.path.exists(template_path):
+            continue
+        template = cv2.imread(template_path)
+        w, h = template.shape[1], template.shape[0]
+
+        res = cv2.matchTemplate(cv_image, template, cv2.TM_CCOEFF_NORMED)
+        threshold = 0.8  # ajuste conforme necessário
+        loc = np.where(res >= threshold)
+        for pt in zip(*loc[::-1]):
+            sequence.append(state)
+
+    return sequence
+
+# ===============================
 # Endpoint /calculate
+# ===============================
 @app.post("/calculate")
 async def calculate(
     file: UploadFile = File(...),
@@ -41,15 +80,15 @@ async def calculate(
     
     # Processa imagem
     image_bytes = await file.read()
-    image = Image.open(io.BytesIO(image_bytes))
-    
-    # Placeholder para sequência extraída
-    extracted_sequence = ["T","D","E","T","D"]
+    extracted_sequence = extract_sequence_from_image(image_bytes)
     history.extend(extracted_sequence)
     
     # Calcula probabilidades
     probabilities = adaptive_probability(history)
     best_event = max(probabilities, key=probabilities.get)
+    
+    # Carrega info da imagem
+    image = Image.open(io.BytesIO(image_bytes))
     
     return {
         "timestamp": str(datetime.now()),
@@ -63,7 +102,9 @@ async def calculate(
         "classificacao": classify(probabilities[best_event])
     }
 
+# ===============================
 # Endpoint raiz
+# ===============================
 @app.get("/")
 def root():
     return {
