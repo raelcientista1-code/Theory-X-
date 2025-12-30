@@ -66,52 +66,37 @@ def extract_sequence_from_image(image_bytes: bytes) -> List[str]:
     return sequence
 
 # ===============================
-# Endpoint /calculate
-# ===============================
+
+from fastapi import UploadFile, File, Form
+
 @app.post("/calculate")
 async def calculate(
-    file: UploadFile = File(...),
-    manual_history: Optional[str] = Form(None)
+    manual_history: str = Form(""),
+    file: UploadFile = File(None)
 ):
     history = []
-    if manual_history:
-        # aceita espaço ou vírgula
-        history = [x.strip().upper() for x in manual_history.replace(",", " ").split()]
-    
-    # Processa imagem
-    image_bytes = await file.read()
-    extracted_sequence = extract_sequence_from_image(image_bytes)
-    history.extend(extracted_sequence)
-    
-    # Calcula probabilidades
+
+    # MANUAL
+    if manual_history.strip():
+        history = [
+            x.upper()
+            for x in manual_history.replace(",", " ").split()
+            if x.upper() in ["T", "D", "E"]
+        ]
+
+    # IMAGEM
+    if file:
+        image_bytes = await file.read()
+        extracted = extract_sequence_from_image(image_bytes)
+        history.extend(extracted)
+
     probabilities = adaptive_probability(history)
     best_event = max(probabilities, key=probabilities.get)
-    
-    # Carrega info da imagem
-    image = Image.open(io.BytesIO(image_bytes))
-    
+
     return {
-        "timestamp": str(datetime.now()),
-        "filename": file.filename,
-        "image_format": image.format,
-        "image_size": image.size,
-        "total_observacoes": len(history),
-        "repeticoes": {s: history.count(s) for s in STATES},
+        "history": history,
+        "total": len(history),
         "probabilidades": probabilities,
         "mais_provavel": best_event,
         "classificacao": classify(probabilities[best_event])
-    }
-
-# ===============================
-# Endpoint raiz
-# ===============================
-@app.get("/")
-def root():
-    return {
-        "status": "online",
-        "message": "Adaptive Probability API está rodando",
-        "endpoints": {
-            "docs": "/docs",
-            "calculate": "/calculate"
-        }
     }
